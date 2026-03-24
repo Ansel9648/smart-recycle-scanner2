@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智淨城市 - AI 智能廢物分類</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background-color: #f4f7f6; padding: 20px; margin: 0; }
+        h1 { color: #2c3e50; font-size: 24px; }
+        p { color: #7f8c8d; }
+        #video-container { margin: 20px auto; width: 100%; max-width: 400px; border: 4px solid #27ae60; border-radius: 12px; overflow: hidden; background: #000; position: relative; }
+        video { width: 100%; display: block; margin: 0 auto; }
+        button { background-color: #27ae60; color: white; border: none; padding: 14px 28px; font-size: 18px; font-weight: bold; border-radius: 8px; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: background-color 0.3s; }
+        button:hover { background-color: #2ecc71; }
+        #result { margin: 20px auto; max-width: 400px; font-size: 22px; font-weight: bold; padding: 15px; border-radius: 8px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .incinerable { background-color: #e67e22; color: white; }
+        .recyclable { background-color: #3498db; color: white; }
+        .non-recyclable { background-color: #e74c3c; color: white; }
+        .loading { background-color: #95a5a6; color: white; }
+    </style>
+</head>
+<body>
+
+    <h1>智淨城市 AI 分類掃描</h1>
+    <p>請將鏡頭對準物件，然後點擊「掃描分析」</p>
+
+    <div id="video-container">
+        <video id="camera" autoplay playsinline></video>
+    </div>
+
+    <button id="scan-btn">📷 掃描分析</button>
+    <canvas id="snapshot" style="display: none;"></canvas>
+    <div id="result"></div>
+
+    <script>
+        const video = document.getElementById('camera');
+        const canvas = document.getElementById('snapshot');
+        const scanBtn = document.getElementById('scan-btn');
+        const resultDiv = document.getElementById('result');
+
+        // 啟動相機
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("無法存取相機: ", err);
+                alert("請允許瀏覽器存取相機權限，以啟用掃描功能！");
+            }
+        }
+
+        // 點擊掃描按鈕
+        scanBtn.addEventListener('click', async () => {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'loading';
+            resultDiv.innerText = "⏳ 正在傳送至 AI 運算大腦...";
+
+            try {
+                // 使用你提供的 API
+                const apiUrl = 'https://yinli.one/v1/chat/completions';
+                const apiKey = 'sk-AG0EJbAgjvM7yTLfZclzSRhcBjyYorY5eQpjGvLOe5O1zD1U';
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o", // 注意：請確保 yinli.one 支援這個視覺模型
+                        messages: [
+                            {
+                                role: "user",
+                                content: [
+                                    {
+                                        type: "text",
+                                        text: "這是一件廢棄物。請分析圖片中的物品，並嚴格只回答以下三個選項之一：可焚燒、可回收、不可回收。不要提供任何其他解釋。"
+                                    },
+                                    {
+                                        type: "image_url",
+                                        image_url: { url: imageData }
+                                    }
+                                ]
+                            }
+                        ],
+                        max_tokens: 10,
+                        temperature: 0.1
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorDetail = await response.text();
+                    throw new Error(`伺服器回應錯誤: ${response.status} - ${errorDetail}`);
+                }
+                
+                const data = await response.json();
+                const resultText = data.choices[0].message.content.trim();
+                displayResult(resultText); 
+
+            } catch (error) {
+                console.error("API 請求失敗:", error);
+                resultDiv.className = 'non-recyclable';
+                resultDiv.innerText = "❌ 分析失敗，請檢查網絡連線或 API 模型設定。";
+            }
+        });
+
+        // 顯示結果
+        function displayResult(category) {
+            resultDiv.innerText = `分類結果：${category}`;
+            
+            if (category.includes('可焚燒')) {
+                resultDiv.className = 'incinerable';
+            } else if (category.includes('可回收') && !category.includes('不可回收')) {
+                resultDiv.className = 'recyclable';
+            } else if (category.includes('不可回收')) {
+                resultDiv.className = 'non-recyclable';
+            } else {
+                resultDiv.className = 'loading';
+                resultDiv.innerText = `⚠️ 未知分類: ${category}`;
+            }
+        }
+
+        window.addEventListener('load', startCamera);
+    </script>
+</body>
+</html>
