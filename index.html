@@ -49,8 +49,16 @@
             }
         }
 
-        // 點擊掃描按鈕
+       // 點擊掃描按鈕
         scanBtn.addEventListener('click', async () => {
+            
+            // 👇👇👇 新增呢段：檢查相機畫面是否已經準備好 👇👇👇
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+                alert("⚠️ 相機畫面尚未準備好或被阻擋，請確保見到自己個樣/畫面後再試！");
+                return; // 終止執行，唔好發送去 API
+            }
+            // 👆👆👆 ========================================= 👆👆👆
+
             const context = canvas.getContext('2d');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
