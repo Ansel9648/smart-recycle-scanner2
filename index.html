@@ -81,25 +81,15 @@
                         'Authorization': `Bearer ${apiKey}`
                     },
                     body: JSON.stringify({
-                        model: "gemini-2.5-flash", // 注意：請確保 yinli.one 支援這個視覺模型
+                        model: "gemini-2.5-flash", 
                         messages: [
                             {
                                 role: "user",
-                                content: [
-                                    {
-                                        type: "text",
-                                        text: "這是一件廢棄物。請分析圖片中的物品，並嚴格只回答以下三個選項之一：可焚燒、可回收、不可回收。不要提供任何其他解釋。"
-                                    },
-                                    {
-                                        type: "image_url",
-                                        image_url: { url: imageData }
-                                    }
-                                ]
+                                content: "這是一個連線測試。如果你收到，請只回答「OK」兩個字。"
                             }
-                        ],
-                        max_tokens: 10,
-                        temperature: 0.1
+                        ]
                     })
+                    // 👆👆👆 ==================== 👆👆👆
                 });
                 
                 if (!response.ok) {
