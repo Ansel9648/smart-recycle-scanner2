@@ -8,7 +8,7 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background-color: #f4f7f6; padding: 20px; margin: 0; }
         h1 { color: #2c3e50; font-size: 24px; }
         p { color: #7f8c8d; }
-        #video-container { margin: 20px auto; width: 100%; max-width: 400px; border: 4px solid #27ae60; border-radius: 12px; overflow: hidden; background: #000; position: relative; }
+        #video-container { margin: 20px auto; width: 100%; max-width: 400px; border: 4px solid #27ae60; border-radius: 12px; overflow: hidden; background: #000; position: relative; min-height: 200px; display: flex; align-items: center; justify-content: center; }
         video { width: 100%; display: block; margin: 0 auto; }
         .btn { background-color: #27ae60; color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 10px 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .btn:hover { background-color: #2ecc71; }
@@ -21,13 +21,13 @@
         .loading { background-color: #95a5a6; color: white; }
         .error { background-color: #34495e; color: #ffcccb; text-align: left; font-size: 14px;}
         /* 預覽上傳的圖片 */
-        #preview-img { max-width: 100%; display: none; margin: 10px auto; border-radius: 8px; }
+        #preview-img { max-width: 100%; display: none; margin: 0 auto; }
     </style>
 </head>
 <body>
 
     <h1>智淨城市 AI 分類掃描</h1>
-    <p>電腦無鏡頭？請使用「上傳相片」功能測試！</p>
+    <p>請掃描廢物，或使用「上傳相片」功能測試！</p>
 
     <div id="video-container">
         <video id="camera" autoplay playsinline></video>
@@ -61,7 +61,6 @@
                 video.srcObject = stream;
             } catch (err) {
                 console.log("提示: 找不到相機，請使用上傳圖片功能。");
-                // 隱藏 video 標籤，免得阻住
                 video.style.display = 'none'; 
             }
         }
@@ -76,7 +75,7 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 const base64Data = e.target.result;
-                // 顯示預覽圖
+                // 顯示預覽圖並隱藏相機
                 video.style.display = 'none';
                 previewImg.style.display = 'block';
                 previewImg.src = base64Data;
@@ -99,6 +98,10 @@
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             const base64Data = canvas.toDataURL('image/jpeg', 0.8);
             
+            // 隱藏預覽圖，確保顯示相機
+            previewImg.style.display = 'none';
+            video.style.display = 'block';
+
             callGeminiAPI(base64Data);
         });
 
@@ -121,7 +124,6 @@
                         'Authorization': `Bearer ${apiKey}`
                     },
                     body: JSON.stringify({
-                        // 已為你更新為截圖中顯示支援的模型
                         model: "gemini-2.5-flash", 
                         messages: [
                             {
@@ -139,23 +141,21 @@
                                 ]
                             }
                         ],
-                        max_tokens: 100,
+                        max_tokens: 100, // 放寬字數限制，防止答案被截斷
                         temperature: 0.1
                     })
                 });
                 
-                // 如果 API 回傳錯誤，將詳細內容顯示在畫面上！
                 if (!response.ok) {
                     const errorDetail = await response.text();
                     throw new Error(`HTTP 狀態碼: ${response.status}\n錯誤詳情: ${errorDetail}`);
                 }
                 
                 const data = await response.json();
-
+                
+                // 將 AI 的完整回應印在 Console，方便 debug
                 console.log("AI 完整回應:", data);
 
-                const resultText = data.choices[0].message.content.trim();
-                // 檢查 API 是否有正常回傳內容
                 if (!data.choices || !data.choices[0] || !data.choices[0].message) {
                     throw new Error("API 回傳格式異常：" + JSON.stringify(data));
                 }
@@ -166,21 +166,22 @@
             } catch (error) {
                 console.error("API 錯誤:", error);
                 resultDiv.className = 'error';
-                // 將長長的錯誤訊息直接顯示在畫面，方便用手機時都可以睇到
                 resultDiv.innerText = `❌ 分析失敗！\n\n系統訊息：\n${error.message}`;
             }
         }
 
         // 顯示結果顏色
         function displayResult(category) {
-            resultDiv.innerText = `分類結果：${category}`;
-            
+            // 只要 AI 嘅回應入面包含以下字眼，就會自動轉顏色
             if (category.includes('可焚燒')) {
                 resultDiv.className = 'incinerable';
+                resultDiv.innerText = `🔥 分類結果：可焚燒\n(AI 回覆: ${category})`;
             } else if (category.includes('可回收') && !category.includes('不可回收')) {
                 resultDiv.className = 'recyclable';
+                resultDiv.innerText = `♻️ 分類結果：可回收\n(AI 回覆: ${category})`;
             } else if (category.includes('不可回收')) {
                 resultDiv.className = 'non-recyclable';
+                resultDiv.innerText = `🚫 分類結果：不可回收\n(AI 回覆: ${category})`;
             } else {
                 resultDiv.className = 'loading';
                 resultDiv.innerText = `⚠️ 未知分類: ${category}`;
