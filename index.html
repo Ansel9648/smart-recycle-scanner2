@@ -128,16 +128,17 @@
         // ==========================================
         // 核心 AI 呼叫功能
         // ==========================================
+        // ==========================================
+        // 核心 AI 呼叫功能
+        // ==========================================
         async function callGeminiAPI(imageData) {
             resultDiv.style.display = 'block';
             resultDiv.className = 'loading';
-            resultDiv.innerText = "⏳ 傳送中... (極速模式)"; // 提示改咗
+            resultDiv.innerText = "⏳ 傳送中... (極速模式)"; 
 
             try {
                 const apiUrl = 'https://yinli.one/v1/chat/completions';
                 const apiKey = 'sk-AG0EJbAgjvM7yTLfZclzSRhcBjyYorY5eQpjGvLOe5O1zD1U';
-
-                // 紀錄開始時間，俾你睇吓究竟有幾快
                 const startTime = Date.now(); 
 
                 const response = await fetch(apiUrl, {
@@ -163,7 +164,8 @@
                                 ]
                             }
                         ],
-                        max_tokens: 20, // 既然 AI 識聽話，縮返細個字數限制可以令佢回覆得再快啲
+                        // 👇 將字數限制改返做 50，等佢可以完整講完中文字
+                        max_tokens: 50, 
                         temperature: 0.1
                     })
                 });
@@ -175,7 +177,6 @@
                 
                 const data = await response.json();
                 
-                // 計算用咗幾多秒
                 const timeTaken = ((Date.now() - startTime) / 1000).toFixed(1);
                 console.log(`⏱️ AI 分析耗時: ${timeTaken} 秒`);
                 console.log("AI 完整回應:", data);
@@ -194,20 +195,21 @@
             }
         }
 
-        // 顯示結果顏色 (加入耗時顯示)
+        // 顯示結果顏色 (強化版防呆配對)
         function displayResult(category, timeTaken) {
-            if (category.includes('可焚燒')) {
-                resultDiv.className = 'incinerable';
-                resultDiv.innerText = `🔥 分類結果：可焚燒\n(耗時: ${timeTaken}秒)`;
-            } else if (category.includes('可回收') && !category.includes('不可回收')) {
-                resultDiv.className = 'recyclable';
-                resultDiv.innerText = `♻️ 分類結果：可回收\n(耗時: ${timeTaken}秒)`;
-            } else if (category.includes('不可回收')) {
+            // 只要 AI 嘅回應包含呢啲字，就算多咗少少標點符號都照殺
+            if (category.includes('不可回收') || category === '不可') {
                 resultDiv.className = 'non-recyclable';
                 resultDiv.innerText = `🚫 分類結果：不可回收\n(耗時: ${timeTaken}秒)`;
+            } else if (category.includes('可回收') || category === '回收') {
+                resultDiv.className = 'recyclable';
+                resultDiv.innerText = `♻️ 分類結果：可回收\n(耗時: ${timeTaken}秒)`;
+            } else if (category.includes('可焚燒') || category.includes('焚燒')) {
+                resultDiv.className = 'incinerable';
+                resultDiv.innerText = `🔥 分類結果：可焚燒\n(耗時: ${timeTaken}秒)`;
             } else {
                 resultDiv.className = 'loading';
-                resultDiv.innerText = `⚠️ 未知分類: ${category}`;
+                resultDiv.innerText = `⚠️ 未知分類: ${category}\n(耗時: ${timeTaken}秒)`;
             }
         }
 
