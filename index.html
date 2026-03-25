@@ -65,7 +65,7 @@
             }
         }
 
-        // 2. 觸發上傳檔案
+        // 2. 觸發上傳檔案 (加入圖片壓縮加速)
         uploadBtn.addEventListener('click', () => fileInput.click());
 
         fileInput.addEventListener('change', (event) => {
@@ -74,36 +74,56 @@
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                const base64Data = e.target.result;
-                // 顯示預覽圖並隱藏相機
-                video.style.display = 'none';
+                // 顯示預覽
                 previewImg.style.display = 'block';
-                previewImg.src = base64Data;
+                video.style.display = 'none';
+                previewImg.src = e.target.result;
                 
-                // 傳送給 AI 分析
-                callGeminiAPI(base64Data);
+                // 創建一個圖片物件用嚟縮圖
+                const img = new Image();
+                img.onload = function() {
+                    compressAndSend(img);
+                };
+                img.src = e.target.result;
             };
             reader.readAsDataURL(file);
         });
 
-        // 3. 處理點擊相機掃描
+        // 3. 處理點擊相機掃描 (加入圖片壓縮加速)
         scanBtn.addEventListener('click', () => {
             if (video.style.display === 'none' || video.videoWidth === 0) {
                 alert("相機未啟動，請使用「上傳垃圾相片」功能！");
                 return;
             }
-            const context = canvas.getContext('2d');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const base64Data = canvas.toDataURL('image/jpeg', 0.8);
-            
-            // 隱藏預覽圖，確保顯示相機
             previewImg.style.display = 'none';
             video.style.display = 'block';
-
-            callGeminiAPI(base64Data);
+            compressAndSend(video);
         });
+
+        // 🔥 新增：共用的「極速壓縮」函數 🔥
+        function compressAndSend(source) {
+            const context = canvas.getContext('2d');
+            
+            // 設定 AI 最易消化的最大寬度 (512px)
+            const MAX_WIDTH = 512; 
+            let width = source.videoWidth || source.width;
+            let height = source.videoHeight || source.height;
+            
+            // 按比例縮小
+            if (width > MAX_WIDTH) {
+                height = Math.floor(height * (MAX_WIDTH / width));
+                width = MAX_WIDTH;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            context.drawImage(source, 0, 0, width, height);
+            
+            // 降低品質至 0.6，極大減少傳輸時間
+            const base64Data = canvas.toDataURL('image/jpeg', 0.6);
+            
+            callGeminiAPI(base64Data);
+        }
 
         // ==========================================
         // 核心 AI 呼叫功能
@@ -111,11 +131,14 @@
         async function callGeminiAPI(imageData) {
             resultDiv.style.display = 'block';
             resultDiv.className = 'loading';
-            resultDiv.innerText = "⏳ 正在傳送至 AI 運算大腦...";
+            resultDiv.innerText = "⏳ 傳送中... (極速模式)"; // 提示改咗
 
             try {
                 const apiUrl = 'https://yinli.one/v1/chat/completions';
                 const apiKey = 'sk-AG0EJbAgjvM7yTLfZclzSRhcBjyYorY5eQpjGvLOe5O1zD1U';
+
+                // 紀錄開始時間，俾你睇吓究竟有幾快
+                const startTime = Date.now(); 
 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -131,7 +154,6 @@
                                 content: [
                                     {
                                         type: "text",
-                                        // 根據你的計劃書要求，分類為：可焚燒、可回收、不可回收
                                         text: "這是一件廢棄物。請分析圖片中的物品，並嚴格只回答以下三個選項之一：可焚燒、可回收、不可回收。不要提供任何其他解釋。"
                                     },
                                     {
@@ -141,7 +163,7 @@
                                 ]
                             }
                         ],
-                        max_tokens: 100, // 放寬字數限制，防止答案被截斷
+                        max_tokens: 20, // 既然 AI 識聽話，縮返細個字數限制可以令佢回覆得再快啲
                         temperature: 0.1
                     })
                 });
@@ -153,15 +175,17 @@
                 
                 const data = await response.json();
                 
-                // 將 AI 的完整回應印在 Console，方便 debug
+                // 計算用咗幾多秒
+                const timeTaken = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log(`⏱️ AI 分析耗時: ${timeTaken} 秒`);
                 console.log("AI 完整回應:", data);
 
                 if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-                    throw new Error("API 回傳格式異常：" + JSON.stringify(data));
+                    throw new Error("API 回傳格式異常");
                 }
 
                 const resultText = data.choices[0].message.content.trim();
-                displayResult(resultText); 
+                displayResult(resultText, timeTaken); 
 
             } catch (error) {
                 console.error("API 錯誤:", error);
@@ -170,18 +194,17 @@
             }
         }
 
-        // 顯示結果顏色
-        function displayResult(category) {
-            // 只要 AI 嘅回應入面包含以下字眼，就會自動轉顏色
+        // 顯示結果顏色 (加入耗時顯示)
+        function displayResult(category, timeTaken) {
             if (category.includes('可焚燒')) {
                 resultDiv.className = 'incinerable';
-                resultDiv.innerText = `🔥 分類結果：可焚燒\n(AI 回覆: ${category})`;
+                resultDiv.innerText = `🔥 分類結果：可焚燒\n(耗時: ${timeTaken}秒)`;
             } else if (category.includes('可回收') && !category.includes('不可回收')) {
                 resultDiv.className = 'recyclable';
-                resultDiv.innerText = `♻️ 分類結果：可回收\n(AI 回覆: ${category})`;
+                resultDiv.innerText = `♻️ 分類結果：可回收\n(耗時: ${timeTaken}秒)`;
             } else if (category.includes('不可回收')) {
                 resultDiv.className = 'non-recyclable';
-                resultDiv.innerText = `🚫 分類結果：不可回收\n(AI 回覆: ${category})`;
+                resultDiv.innerText = `🚫 分類結果：不可回收\n(耗時: ${timeTaken}秒)`;
             } else {
                 resultDiv.className = 'loading';
                 resultDiv.innerText = `⚠️ 未知分類: ${category}`;
