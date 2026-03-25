@@ -10,67 +10,107 @@
         p { color: #7f8c8d; }
         #video-container { margin: 20px auto; width: 100%; max-width: 400px; border: 4px solid #27ae60; border-radius: 12px; overflow: hidden; background: #000; position: relative; }
         video { width: 100%; display: block; margin: 0 auto; }
-        button { background-color: #27ae60; color: white; border: none; padding: 14px 28px; font-size: 18px; font-weight: bold; border-radius: 8px; cursor: pointer; margin-top: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: background-color 0.3s; }
-        button:hover { background-color: #2ecc71; }
-        #result { margin: 20px auto; max-width: 400px; font-size: 22px; font-weight: bold; padding: 15px; border-radius: 8px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn { background-color: #27ae60; color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; margin: 10px 5px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn:hover { background-color: #2ecc71; }
+        .upload-btn { background-color: #2980b9; }
+        .upload-btn:hover { background-color: #3498db; }
+        #result { margin: 20px auto; max-width: 400px; font-size: 18px; font-weight: bold; padding: 15px; border-radius: 8px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); word-wrap: break-word; }
         .incinerable { background-color: #e67e22; color: white; }
         .recyclable { background-color: #3498db; color: white; }
         .non-recyclable { background-color: #e74c3c; color: white; }
         .loading { background-color: #95a5a6; color: white; }
+        .error { background-color: #34495e; color: #ffcccb; text-align: left; font-size: 14px;}
+        /* 預覽上傳的圖片 */
+        #preview-img { max-width: 100%; display: none; margin: 10px auto; border-radius: 8px; }
     </style>
 </head>
 <body>
 
     <h1>智淨城市 AI 分類掃描</h1>
-    <p>請將鏡頭對準物件，然後點擊「掃描分析」</p>
+    <p>電腦無鏡頭？請使用「上傳相片」功能測試！</p>
 
     <div id="video-container">
         <video id="camera" autoplay playsinline></video>
+        <img id="preview-img" alt="上傳預覽">
     </div>
 
-    <button id="scan-btn">📷 掃描分析</button>
+    <div>
+        <button id="scan-btn" class="btn">📷 掃描相機畫面</button>
+        
+        <input type="file" id="file-input" accept="image/*" style="display: none;">
+        <button id="upload-btn" class="btn upload-btn">📁 上傳垃圾相片</button>
+    </div>
+    
     <canvas id="snapshot" style="display: none;"></canvas>
+    
     <div id="result"></div>
 
     <script>
         const video = document.getElementById('camera');
         const canvas = document.getElementById('snapshot');
         const scanBtn = document.getElementById('scan-btn');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileInput = document.getElementById('file-input');
+        const previewImg = document.getElementById('preview-img');
         const resultDiv = document.getElementById('result');
 
-        // 啟動相機
+        // 1. 嘗試啟動相機
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 video.srcObject = stream;
             } catch (err) {
-                console.error("無法存取相機: ", err);
-                alert("請允許瀏覽器存取相機權限，以啟用掃描功能！");
+                console.log("提示: 找不到相機，請使用上傳圖片功能。");
+                // 隱藏 video 標籤，免得阻住
+                video.style.display = 'none'; 
             }
         }
 
-       // 點擊掃描按鈕
-        scanBtn.addEventListener('click', async () => {
-            
-            // 👇👇👇 新增呢段：檢查相機畫面是否已經準備好 👇👇👇
-            if (video.videoWidth === 0 || video.videoHeight === 0) {
-                alert("⚠️ 相機畫面尚未準備好或被阻擋，請確保見到自己個樣/畫面後再試！");
-                return; // 終止執行，唔好發送去 API
-            }
-            // 👆👆👆 ========================================= 👆👆👆
+        // 2. 觸發上傳檔案
+        uploadBtn.addEventListener('click', () => fileInput.click());
 
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const base64Data = e.target.result;
+                // 顯示預覽圖
+                video.style.display = 'none';
+                previewImg.style.display = 'block';
+                previewImg.src = base64Data;
+                
+                // 傳送給 AI 分析
+                callGeminiAPI(base64Data);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 3. 處理點擊相機掃描
+        scanBtn.addEventListener('click', () => {
+            if (video.style.display === 'none' || video.videoWidth === 0) {
+                alert("相機未啟動，請使用「上傳垃圾相片」功能！");
+                return;
+            }
             const context = canvas.getContext('2d');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+            const base64Data = canvas.toDataURL('image/jpeg', 0.8);
+            
+            callGeminiAPI(base64Data);
+        });
 
+        // ==========================================
+        // 核心 AI 呼叫功能
+        // ==========================================
+        async function callGeminiAPI(imageData) {
             resultDiv.style.display = 'block';
             resultDiv.className = 'loading';
             resultDiv.innerText = "⏳ 正在傳送至 AI 運算大腦...";
 
             try {
-                // 使用你提供的 API
                 const apiUrl = 'https://yinli.one/v1/chat/completions';
                 const apiKey = 'sk-AG0EJbAgjvM7yTLfZclzSRhcBjyYorY5eQpjGvLOe5O1zD1U';
 
@@ -81,34 +121,54 @@
                         'Authorization': `Bearer ${apiKey}`
                     },
                     body: JSON.stringify({
+                        // 已為你更新為截圖中顯示支援的模型
                         model: "gemini-2.5-flash", 
                         messages: [
                             {
                                 role: "user",
-                                content: "這是一個連線測試。如果你收到，請只回答「OK」兩個字。"
+                                content: [
+                                    {
+                                        type: "text",
+                                        // 根據你的計劃書要求，分類為：可焚燒、可回收、不可回收
+                                        text: "這是一件廢棄物。請分析圖片中的物品，並嚴格只回答以下三個選項之一：可焚燒、可回收、不可回收。不要提供任何其他解釋。"
+                                    },
+                                    {
+                                        type: "image_url",
+                                        image_url: { url: imageData }
+                                    }
+                                ]
                             }
-                        ]
+                        ],
+                        max_tokens: 10,
+                        temperature: 0.1
                     })
-                    // 👆👆👆 ==================== 👆👆👆
                 });
                 
+                // 如果 API 回傳錯誤，將詳細內容顯示在畫面上！
                 if (!response.ok) {
                     const errorDetail = await response.text();
-                    throw new Error(`伺服器回應錯誤: ${response.status} - ${errorDetail}`);
+                    throw new Error(`HTTP 狀態碼: ${response.status}\n錯誤詳情: ${errorDetail}`);
                 }
                 
                 const data = await response.json();
+                
+                // 檢查 API 是否有正常回傳內容
+                if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+                    throw new Error("API 回傳格式異常：" + JSON.stringify(data));
+                }
+
                 const resultText = data.choices[0].message.content.trim();
                 displayResult(resultText); 
 
             } catch (error) {
-                console.error("API 請求失敗:", error);
-                resultDiv.className = 'non-recyclable';
-                resultDiv.innerText = "❌ 分析失敗，請檢查網絡連線或 API 模型設定。";
+                console.error("API 錯誤:", error);
+                resultDiv.className = 'error';
+                // 將長長的錯誤訊息直接顯示在畫面，方便用手機時都可以睇到
+                resultDiv.innerText = `❌ 分析失敗！\n\n系統訊息：\n${error.message}`;
             }
-        });
+        }
 
-        // 顯示結果
+        // 顯示結果顏色
         function displayResult(category) {
             resultDiv.innerText = `分類結果：${category}`;
             
